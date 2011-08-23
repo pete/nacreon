@@ -1,0 +1,70 @@
+#! /usr/bin/env ruby
+# A script to create Nacreon User #1.
+
+if File.exist?('./lib/nacreon.rb')
+	$: << File.expand_path("./lib")
+end
+require 'rubygems'
+require 'nacreon'
+
+include Nacreon::Model
+
+def usage o
+	o.puts <<-EOF
+#{$0} (username|-)
+You need to specify a username or just '-' (in which case, your current Unix
+username will be used).
+
+This program bootstraps an admin user for Nacreon.  You will need access to the
+Nacreon database.  You'll be prompted for a password.
+
+Values per nacreon.json:
+Nacreon database:
+\t#{Nacreon::Config.db}
+EOF
+end
+
+if %w(help --help -help -h).any? &ARGV.method(:include?)
+	usage $stdout
+	exit
+end
+
+username = ARGV.first
+
+if username.nil?
+	usage $stderr
+	exit 1
+end
+
+if username == '-'
+	username = `id -nu`.strip
+end
+
+def get_password username
+	loop {
+		($stdout << "Create a nacreon password for new user #{username}:").flush
+		system 'stty -echo 2>/dev/null'
+		password = $stdin.gets.chomp
+		system 'stty echo 2>/dev/null'
+		($stdout << "\nType it again:").flush
+		system 'stty -echo 2>/dev/null'
+		password_check = $stdin.gets.chomp
+		system 'stty echo 2>/dev/null'
+		$stdout << "\n"
+
+		return password if password == password_check
+
+		$stderr.puts "Passwords didn't match!"
+	}
+end
+
+password = get_password username
+
+user = User.new(:name => username, :password => password)
+unless user.save
+	$stderr.puts "User couldn't be saved!  Errors follow:",
+		*user.errors.full_messages
+	exit 1
+end
+
+puts "Okay, you're all set up!  #{username} can log into Nacreon."

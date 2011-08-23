@@ -1,0 +1,133 @@
+= An Overview of Nacreon
+
+Here's an overview of Nacreon, explaining the features and architecture, as
+well as how to get started hacking on Nacreon, if you care to get into the
+innards.
+
+For the impatient, have a look at lib/nacreon.rb and bin/nacreon-app-managerd .
+
+= Features
+
+The goal of Nacreon is to provide Platform-as-a-Service for web applications.
+Developers can create applications, upload different versions of the code,
+deploy versions, and load-balance between applications.
+
+The developers' interaction with Nacreon is through a simple web API, and a
+client is provided for interacting with the API via Ruby or the shell.
+
+= Architecture
+
+Nacreon is built in three parts:  an Application Manager which deploys and
+looks after hosted web applications, an HTTP reverse proxy for getting to these
+applications, and a JSON-based REST-like API for getting your applications into
+Nacreon and manipulating them.  The API and the Application Manager interact
+with each other through a database, and with the proxy by generating
+configuration.
+
+The App Manager is written in Ruby, as is the Rack-based API.  The HTTP
+reverse proxying is handled by nginx, and the App Manager generates
+configuration files for it and restarts when there are changes.
+
+= The Gory Details
+
+The entry point for hacking is the API part, housed in lib/nacreon/app.rb.
+Nacreon::App inherits from Watts::App, from the Watts library.
+
+== How the API Works
+
+We'll cover the logic that turns "GET /foo/bar/asdf" into a specific method
+call, then provide an overview of the rest of the API codebase.
+
+=== Routing Logic
+
+All we actually care about here is Watts::App#resource.  Resources are defined
+by giving components of paths, and the resources that they point to.  Blocks
+define nesting.  If a path component is a symbol or a regex, then it is passed
+along as an argument for the HTTP method called.  (For a little more
+documentation about this class, see
+http://rubydoc.info/gems/watts/0.0.6/Watts/App , but there's really not much
+more to it.)
+
+The resources, modeled after HTTP resources, are found in
+lib/nacreon/resource , and they all subclass (indirectly) Watts::Resource.
+This is a simple abstraction of an HTTP resource, decoupled from the path, that
+is expected to respond to HTTP methods (e.g., GET, PUT, etc.), which are
+provided by the resource via Watts::Resource.get, Watts::Resource.put, etc.,
+and are dispatched through Nacreon::App.
+
+The convention for naming is Resource for individual instances of a given
+class and ResourceList for lists.
+
+So, to use an exerpt as an example: 
+    resource("user", UserList) {
+      resource(/^[-0-9a-z]+$/, User)
+    }
+
+This means that '/user' points to the UserList resource, and anything
+under "/user/#{username}" (where username is a string consisting of one or more
+alphanumeric characters or hyphens) points to the User resource.  (As no other
+sub-components of the path are defined, Nacreon will return a 404 for, e.g.,
+"/user/$" or "/user/_foo_", as neither of those paths match.)
+
+"GET /user" will call UserList#get, and "PUT /user/asdf" will call
+User#put("asdf").  The get() and put() methods are defined in the resources
+themselves.  Methods that are not defined will return "405 Method Not Allowed"
+errors, with the appropriate "Allow:" header set.  So, if you pop open
+lib/nacreon/resource/user.rb , you'll see User and UserList, which contain
+calls to get(), etc., with blocks full of code to invoke on those actions.
+
+=== Business Logic
+
+The business logic of the API is mainly concerned with stuffing objects into
+the database and pulling them back out again to send to the client as JSON;
+really basic CRUD stuff.  It's mostly handled in the Resources and the Models.
+For most classes in Nacreon::Model, there is a class in Nacreon::Resource for
+manipulating instances of them.
+
+To do anything interesting through the API, you need to have a user.
+bin/nacreon-bootstrap-user is provided for creating the first admin user for
+the system, and this user can create more users.  Users authenticate using HTTP
+Basic Authentication, so Nacreon needs to be deployed behind HTTPS to prevent
+hijacking.  There is no session management.
+
+The first thing to do after that is to create an App, and then a Version.  For
+the time being, only Rack-based applications (compatible with Unicorn) are
+supported.  The version should be uploaded as a gzip'd tarball, with the root
+of the codebase as the top level of the tarball (i.e., no prefix added) and a
+config.ru at the top level.
+
+Once a version is created, any number of instances can be deployed by POSTing
+to "/app/#{app_name}" with appropriate arguments.  See the documentation
+for Nacreon::Resource::App#post in lib/nacreon/resource/app.rb.
+
+Additional versions can be created, deployed, and killed at will.  Instances
+that have started up properly and are still alive can be accessed through
+$version_name.$app_name.$domain_suffix (if you have set up DNS), and
+instances of the most recently deployed version will be accessible through the
+proxy at $app_name.$domain_suffix (see lib/nacreon/config.rb and
+nacreon.json).  This makes it possible to compare different versions of an
+application, and is useful for testing.
+
+== The App Manager Daemon
+
+The App Manager runs as a daemon, started via bin/nacreon-app-managerd, whose
+main loop checks the database to see what applications need to be deployed,
+which ones have been deployed and should be checked to see if they started
+properly, which ones have died before or after starting, and which ones are
+scheduled to be killed.
+
+The logic for it is in lib/nacreon/app_manager/daemon.rb .
+
+== The Reverse Proxy
+
+This is farmed out entirely to nginx.  nginx is started and reads the
+Nacreon-generated config file, which generated from the list of live
+instances of applications in the database.  There are plans to add metrics and
+health checks (e.g., informing the App Manager when there is a connection
+refused or a gateway timeout by a supposedly live instance, reporting latency,
+etc.) at some point in the future.
+
+= That's It.
+
+That should (hopefully) be enough information to get started working on
+Nacreon!  Happy hacking!

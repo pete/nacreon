@@ -1,0 +1,3 @@
+{"db":"sqlite:///tmp/nacreon-unit-test.db",
+ "deploy_root":"tmp/unit-deploy-root"
+}

@@ -1,0 +1,55 @@
+= Overview
+Communicates with Nacreon via the database and possibly other means, launches
+and monitors apps.  Hopefully coordinates its efforts with other instances of
+itself.
+
+== TODO/open questions:
+* Reverse proxy management to be pulled out of the AppManager.  Keeping it
+  there is very probably untenable.
+* A way to determine the number of live AppManagers.  It needs to tolerate
+  AppManagers disappearing (and try to keep deadlock away) and handle new ones
+  spinning up, on 
+* A way to provide some visibility into what has happened to instances.  (i.e.,
+  making their logs available and adding some sort of annotation to the model to
+  explain, e.g., why an instance was killed, why or how it died, etc., to
+  supplement the 'status' field, which is mostly used for internal logic.)
+* Access to logfiles/stderr.
+
+== Cooperatively distributing load
+TODO.  My initial thinking along these lines is to measure free memory and
+15-minute load average (divided by number of CPUs) on the VM to compute a score.
+
+Although we're currently running single instances of app managers, the intention
+is to allow N app managers, showing up and leaving, managing instances,
+distributing load evenly.
+
+The planned features:
+1.  Ensuring that all instances are deployed, as long as we have capacity.
+2.  Ensuring that load is distributed optimally.
+3.  Accounting for the random arrival and departure of application managers.
+4.  Dead app managers' instances being redeployed by live ones.  (For which
+we'll need a way to determine when app managers have crashed)
+5.  BONUS FEATURE:  not requiring that the app managers have a communication
+layer beyond the database.
+
+We have a couple of possible plans for this, but none are implemented yet.
+
+== Sleep time ideas
+TODO.  For now, probably a constant 0.1 or so.  It is going to do a full table
+scan of instances each iteration through the loop, so we don't want to hog CPU
+or DB resources.
+
+Note that the minimum time between deploy and first request is 2 times the time
+slept.  We could reduce the time when there are changes and increase it when
+there are none, within a given window, say between 0.001s and 0.5s.
+
+Another idea is to sleep for
+ t * i / n + C
+where t is the proposed sleep time (constant or sliding time as above) i is the
+number of live instances handled by the current AppManager, n is the number of
+live AppManagers, and C is a constant minimum sleep time if we have no live
+instances.  n could be the 15-minute load average, too, which makes it not take
+a DB hit (or whatever we use to communicate between AppManagers).
+
+We could also do a more generalized load metric, based on CPU and RAM usage,
+perhaps per app instance.

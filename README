@@ -1,0 +1,84 @@
+= Nacreon
+
+So here it is, bits will be gotten to work, don't depend on anything in here,
+as not a lot of it has been figured out yet.  It is beta software.  There's a
+client (Ruby and command-line) that also serves as a reference implementation;
+see github.com/pete/terpene for that.
+
+Nacreon is intended as a very simple, lightweight, Platform-as-a-Service
+application.  It is written in Ruby, and currently supports only Ruby 1.9
+applications, but see doc/TODO for information on future support.
+
+== Prerequisites:
+
+* Ruby 1.9.x (1.9.1 *ought* to work, although I've been working under 1.9.2)
+* Some gems:  watts, json, sequel, (and the gems that those
+gems depend on).  `rake install_deps` or `bundle install` will take care of
+this.
+
+== Getting Ready:
+
+You'll want to run `rake migrate` to update the database.  By default,
+it uses an MySQL.  You can change this by making a 'nacreon.json' file,
+and pointing the environment variable $NACREON_CONF at it (the one in the
+root of the repo is intended as reference and a simple version for devs.)
+[TODO:  Document the 'nacreon.json' config file when the other config stuff
+get added to it.]
+
+=== OS requirements
+
+The packages required as prerequisites for various distros are listed below.
+[TODO: Mostly incomplete.  If you run into a package that Nacreon requires that
+isn't mentioned in the command for your OS, please update the command.]  See
+doc/deployment.rdoc for information on how to deploy to a server.  Those
+instructions are written for Debian/Ubuntu; see below for what is required for
+your own operating system.  "MySQL" is assumed; for Postgres or other databases, you'll need a few 
+
+As closely tied to the operating system as Nacreon is, it is difficult to
+support operating systems that don't conform on some level to a regular Unix
+environment.  Linux, Dragonfly BSD, and OSX work; your mileage may vary
+elsewhere.  Will almost certainly not work under Plan 9 or Windows, but one of
+the developers loves obscure platforms, so we can't say "never".
+
+==== Debian / Ubuntu:
+
+* Instructions that should work for both are available in doc/deployment.rdoc.
+
+==== CRUX:
+
+* `prt-get depinst ruby mysql-ruby`
+
+==== MacOS X:
+
+* Install (via ports or homebrew, likely) Ruby, MySQL, and the libraries for
+accessing MySQL from Ruby.
+* rake newb
+
+==== Arch:
+
+* `pacman -S ruby mysql-ruby`
+
+== Running a Dev Server:
+
+There's a rake task for unicorn, but anything that understands a
+config.ru ought to work.
+`rake unicorn` will start it up.  If you wish to run it as a daemon,
+`rake daemon` will work.  You can reload without restarting unicorn by
+doing `killall -HUP unicorn`.  See
+http://unicorn.bogomips.org/SIGNALS.html for more information.
+
+You'll also need to start up an AppManager daemon if you plan to run any apps.
+That can be done with `rake appmanagerd` to run as a daemon with logging to
+syslog, or `rake appmanager` to run in the foreground with logging to stdout.
+
+== Poking at the App Interactively:
+
+`rake irb` will start up IRB with everything loaded.  You can poke at
+the models in Nacreon::Model, instantiate the application and check
+routing, and run requests through it.
+
+== Further Documentation
+See doc/overview.rdoc for an overview of how the codebase works, if you want to
+hack on Nacreon.
+
+See doc/TODO for where we're going with this.

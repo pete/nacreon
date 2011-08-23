@@ -1,0 +1,64 @@
+= Deploying Nacreon
+
+== You will need:
+A machine to deploy on.  These instructions are for a Debian/Ubuntu system, so
+your mileage may vary.
+
+You'll need an A-record for '*.$suffix' and '$suffix', pointing to the machine
+that you want to deploy on.  For testing it out, you can get away with playing
+with /etc/hosts.
+
+== Installing packages you'll need:
+ # apt-get update
+ # apt-get install gcc libz-dev libreadline6-dev
+ # cd /usr/src
+ # wget http://ftp.ruby-lang.org/pub/ruby/1.9/ruby-1.9.2-p180.tar.gz
+ # tar xvzf ruby-1.9.2-p180.tar.gz
+ # cd ruby-1.9.2-p180/
+ # CFLAGS="-march=native -pipe -O3" ./configure --prefix=/usr/local && make -j5 && make install
+ # gem install unicorn watts sequel bundler
+ # apt-get install mysql-server mysql-client libmysqlclient-dev nginx libsqlite3-dev
+Set a password for MySQL, remember it!
+ # gem install mysql bundle
+
+== Prep MySQL for Nacreon:
+ # mysql -p
+ mysql> create database nacreon;
+ mysql> grant all on nacreon.* to nacreon@localhost;
+ mysql> flush privileges;
+ mysql> ^D
+
+== Give Nacreon the directories it wants:
+ # mkdir -p /srv/{nacreon,nacreon-instances}
+ # chown -R nacreon:nacreon /srv/{nacreon,nacreon-instances} /var/log/nacreon.log
+
+== Become nacreon:
+If you're doing a "real" deploy, you'll probably want a dedicated user to run
+the Nacreon applications.  Feel free to skip this step (and other references to
+the nacreon user) if you are running a dev server.
+ # su - nacreon
+ $ mkdir -m 700 .ssh
+ $ touch .ssh/authorized_keys ; chmod 600 .ssh/authorized_keys
+ $ [add your key]
+
+== Get the Nacreon source over to nacreon:
+ $ cd proj/nacreon
+ $ git archive --format tar --prefix=nacreon/ HEAD | ssh nacreon@nacreon.example.com 'if [ -d nacreon ]; then rm -rf nacreon-old; mv nacreon nacreon-old; fi; tar xvf -'
+# TODO:  Verify Nacreon works properly as a gem.
+
+== Set up and run Nacreon (finally!):
+ # vi /etc/nacreon.json
+----
+ {"db":"mysql://nacreon@localhost/nacreon",
+  "deploy_root":"/srv/nacreon-instances",
+  "tmpdir":"/home/nacreon/tmp",
+  "domain":"nacreon.example.com"}
+----
+ # mkdir -m 1777 /var/run/unicorn /var/log/unicorn
+ # su - nacreon
+ $ cd nacreon
+ $ NACREON_CONF=/etc/nacreon.json rake migrate
+ $ NACREON_CONF=/etc/nacreon.json unicorn -E production -c conf/unicorn-public.rb
+
+== Elided:
+Setting up a server to run in front of nacreon (i.e., a reverse proxy to route requests to either Nacreon's unicorn instance, or Nacreon's nginx reverse proxy).

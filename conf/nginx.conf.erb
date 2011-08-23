@@ -1,0 +1,65 @@
+<%# Expects defined:  apps, domain, port %>
+worker_processes 4;
+<%# TODO:  All of the nginx files are just stuffed into /tmp to avoid caring
+  # about permissions for now.
+%>
+error_log /tmp/nginx-nacreon-error.log info;
+pid /tmp/nginx-nacreon.pid;
+
+events {
+  worker_connections 128;
+}
+
+http {
+  access_log /tmp/nginx-nacreon-access.log combined;
+  keepalive_timeout 65;
+  server_names_hash_bucket_size 64;
+  <%# TODO:  We need a default of some sort; perhaps just a static docroot or
+    # something for now, but it would be useful to have something sensible
+    # later on.
+  %>
+  server {
+    server_name _;
+    listen <%= port %> default;
+    root /srv/http/default;
+  }
+
+  <% apps.each { |app| %>
+    <% if app.live_instances.empty? %>
+    # (Skipping <%= app.name %>'s configuration; no live instances.)
+
+      <% next %>
+    <% end %>
+    # Config for Application <%= app.name %>
+    <% app_hostname = "#{app.name}.#{domain}" %>
+    <% app.versions.each { |version| %>
+      <%
+        next if version.live_instances.empty?
+
+        hostname = "#{version.name}.#{app.name}.#{domain}"
+        upname = "#{version.name}-#{app.name}"
+      %>
+      upstream <%= upname %> {
+        <% version.live_instances.each { |i| %>
+          server <%= i.address %>;
+        <% } %>
+      }
+      server {
+        server_name <%= hostname %>;
+        <% if app.domain_name %>
+          server_name <%= "#{version.name}.#{app.domain_name}" %>;
+        <% end %>
+        <% if version == app.latest_version %>
+          server_name <%= app_hostname %>;
+          <% if app.domain_name %>
+            server_name <%= app.domain_name %>;
+          <% end %>
+        <% end %>
+        listen <%= port %>;
+        location / {
+          proxy_pass http://<%= upname %>;
+        }
+      }
+    <% } %>
+  <% } %>
+}

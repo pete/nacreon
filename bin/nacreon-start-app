@@ -1,0 +1,49 @@
+#! /usr/bin/env ruby
+require 'rubygems'
+require 'fileutils'
+require 'nacreon'
+require 'socket'
+require 'pp'
+
+include Nacreon::Model
+include Nacreon::AppManager
+
+# Trivial arg parsing and some checks:
+app_name, version_name = ARGV
+
+if([app_name, version_name].any?(&:nil?) ||
+   %w(help -h --help -help).any? ARGV[0].method(&:'=='))
+	$stderr.puts "Usage:  #{$0} $app_name $version_name.  Bailing!",
+		"This program starts up an instance of an app manually, rather than through",
+		"Nacreon's API.  It is useful for debugging or for deployment",
+		"in the absence of a running Nacreon."
+	exit 1
+end
+
+app = App[:name => app_name]
+
+unless app
+	$stderr.puts "Invalid app name supplied!  Not deploying #{app_name}."
+	exit 3
+end
+
+version = nil
+if version_name == 'latest'
+	version = app.versions_dataset.order(:created).last
+	puts "Deploying latest version (#{version.name})."
+else
+	version = app.versions_dataset[:name => version_name]
+end
+
+unless version
+	$stderr.puts "Invalid version name ('#{version_name}') supplied!",
+		"Not deploying #{app_name}.  Available versions:", *app.version_names
+	exit 4
+end
+
+if inst = deploy(version)
+	puts "Started #{inst}"
+else
+	$stderr.puts "Oops."
+	exit 1
+end

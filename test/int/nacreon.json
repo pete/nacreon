@@ -1,0 +1,4 @@
+{"db":"sqlite:///tmp/nacreon-integration-test.db",
+ "nginx_port":"21246",
+ "deploy_root":"tmp/integration-instances"
+}

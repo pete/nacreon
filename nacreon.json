@@ -1,0 +1,3 @@
+{"db":"mysql://localhost/nacreon",
+ "deploy_root":"/tmp/nacreon-apps",
+ "tmpdir":"tmp"}

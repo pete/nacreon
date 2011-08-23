@@ -1,0 +1,113 @@
+#! /usr/bin/env ruby
+# Starts up the Nacreon AppManager Daemon.
+
+DefaultOpts = {
+	:daemonize => true,
+	:log_file => nil,
+	:nacreon_conf => ENV['NACREON_CONF'],
+	:pidfile => '/var/run/nacreon-app-managerd.pid',
+	:nginx => true,
+}
+
+def usage out
+	out.puts "Usage:  #{$0} [options]",
+
+		"-f\t\tDon't daemonize; run in the foreground and log to stdout.",
+
+		"-o $file\tLog to $file instead of syslog.",
+
+		"-c $conf\tSpecify the Nacreon config file to use.",
+		"\t\t(Overrides the $NACREON_CONF environment variable.)",
+
+		"-p $pf\tUse the specified pidfile instead of #{DefaultOpts[:pidfile]}",
+
+		"-N\t\tDon't start nginx.",
+
+		"-h\t\tShow this usage message."
+end
+
+def parse_args argv = ARGV
+	argv = argv.dup
+	opts = DefaultOpts.dup
+
+	shift = lambda { |opt|
+		if argv.empty?
+			$stderr.puts "ERROR:  Option '#{opt}' requires an argument!"
+			usage
+			exit 1
+		end
+		argv.shift
+	}
+	
+	while arg = argv.shift
+		case arg
+		when '-h', '-help', '--help', 'help'
+			usage $stdout
+			exit
+		when '-f'
+			opts[:daemonize] = false
+			opts[:log_file] = $stdout
+		when '-o'
+			opts[:log_file] = shift["-o"]
+		when '-c'
+			opts[:nacreon_conf] = shift["-c"]
+		when '-p'
+			opts[:pidfile] = shift["-p"]
+		when '-N'
+			opts[:nginx] = false
+		else
+			$stderr.puts "ERROR:  Invalid option:  '#{arg}'"
+			usage
+			exit 1
+		end
+	end
+
+	opts
+end
+
+opts = parse_args
+ENV['NACREON_CONF'] = opts[:nacreon_conf]
+
+Process.daemon if opts[:daemonize]
+
+require 'rubygems'
+%w(
+	logger
+	syslog_logger
+	nacreon
+	nacreon/app_manager/daemon.rb
+).each &method(:require)
+
+# Start the logger
+logger = 
+	if opts[:log_file]
+		begin
+			Logger.new(opts[:log_file])
+		rescue
+			l = SyslogLogger.new($0)
+			l.err("Couldn't access log file #{opts[:log_file]}!"\
+				"Falling back to syslog.")
+			l
+		end
+	else
+		SyslogLogger.new($0)
+	end
+
+trap('CLD') {
+	while((p = Process.wait rescue nil))
+		logger.warn "Process #{p} died unexpectedly."
+	end
+}
+
+trap('TERM') {
+	logger.fatal "Received SIGTERM!"
+	Nacreon::AppManager.kill_everybody! "AppManager received SIGTERM!"
+	exit! 0
+}
+
+# Start the main loop
+Nacreon.log = logger
+Nacreon.init
+Nacreon::AppManager.start_rproxies if opts[:nginx]
+appm = Nacreon::AppManager::Daemon.new
+appm.main_loop

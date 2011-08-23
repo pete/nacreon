@@ -1,0 +1,24 @@
+This list is reasonably unordered, and parts of it are speculative (i.e., the
+parts with question marks or "perhaps" in them).  It represents what we plan to
+do to Nacreon in the near term.
+
+* Clean up Bundler support. (gem mirror to speed it up, put bundling somewhere
+that speed isn't as critical, as a stopgap until "slugs" are implemented.)
+* Automatic scaling.
+* Clean up the tests. (Procfiles/foreman?)  Add more integration tests.
+* Ruby 1.8 app support.
+* Non-Ruby app support (Procfiles/foreman?)
+* Clean up things dumped unceremoniously in /tmp; use /var, etc., un-hard-code
+some paths.
+* Storing fresh application directories (as in Heroku's "slugs") to speed up
+deployment.  
+* LXC support for process jailing under Linux; make optional so that development
+on OSX can continue.  (Perhaps support DragonflyBSD jails, should someone
+develop the spare time for this.)  Possibly utilize union mounts/overlays.
+* Tarball distribution to support AppManager daemons.  (S3-compatible, likely,
+and a transition to "slugs")
+* Load-balancing between multiple instances of the AppManager.
+* Push all of the auth stuff into Rack middleware.
+* Isolate support.
+* Better support for log access for clients.
+* Tighter user access controls.
